@@ -228,14 +228,8 @@ const VideoChatWithExecution: React.FC = () => {
     try {
       setStreamError(null);
       
-      // First enter fullscreen mode - must happen directly from user gesture
-      const fullscreenSuccess = await enterFullscreenMode();
-      if (!fullscreenSuccess) {
-        addMessage('system', 'Recording requires fullscreen mode. Please allow fullscreen.');
-        return;
-      }
-      
-      // Request screen capture (preferring current tab)
+      // First request screen capture (before entering fullscreen)
+      // This way the user can select their screen/tab first
       const displayStream = await navigator.mediaDevices.getDisplayMedia({ 
         video: {
           displaySurface: 'browser' as any
@@ -246,6 +240,18 @@ const VideoChatWithExecution: React.FC = () => {
       // Store screen stream reference
       screenStreamRef.current = displayStream;
       
+      // Now enter fullscreen mode after user has selected the screen
+      const fullscreenSuccess = await enterFullscreenMode();
+      if (!fullscreenSuccess) {
+        // If fullscreen fails, stop the streams and return
+        if (screenStreamRef.current) {
+          screenStreamRef.current.getTracks().forEach(track => track.stop());
+          screenStreamRef.current = null;
+        }
+        addMessage('system', 'Recording requires fullscreen mode. Please allow fullscreen.');
+        return;
+      }
+      
       // If possible, check if the user selected the current tab
       const screenVideoTrack = displayStream.getVideoTracks()[0];
       if (screenVideoTrack?.getSettings) {
@@ -255,7 +261,7 @@ const VideoChatWithExecution: React.FC = () => {
         }
       }
       
-      // Request webcam access
+      // Request webcam access after screen capture and fullscreen are established
       const webcamStream = await navigator.mediaDevices.getUserMedia({ 
         video: true, 
         audio: true 
@@ -269,9 +275,6 @@ const VideoChatWithExecution: React.FC = () => {
         webcamRef.current.srcObject = webcamStream;
         webcamRef.current.muted = true;
       }
-      
-      // We don't need to display the screen preview, but we still need to set the stream
-      // videoRef.current is not shown in the UI, but we maintain the reference for internal use
       
       // Handle when user ends screen sharing via browser UI
       displayStream.getVideoTracks()[0].addEventListener('ended', () => {
@@ -294,6 +297,17 @@ const VideoChatWithExecution: React.FC = () => {
       addMessage('system', 'Recording started with screen and webcam');
       
     } catch (err) {
+      // Cleanup any streams that might have been created
+      if (screenStreamRef.current) {
+        screenStreamRef.current.getTracks().forEach(track => track.stop());
+        screenStreamRef.current = null;
+      }
+      
+      if (webcamStreamRef.current) {
+        webcamStreamRef.current.getTracks().forEach(track => track.stop());
+        webcamStreamRef.current = null;
+      }
+      
       exitFullscreenMode(); // Exit fullscreen if there's an error
       console.error("Error starting recording:", err);
       setStreamError(err instanceof Error ? err.message : "Failed to start recording");
