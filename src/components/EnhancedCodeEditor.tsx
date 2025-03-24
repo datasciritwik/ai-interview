@@ -1,92 +1,39 @@
-import React, { useState, useRef, useEffect } from 'react';
-import Prism from 'prismjs';
-import 'prismjs/components/prism-python';
-import 'prismjs/components/prism-java';
-import 'prismjs/components/prism-cpp';
-import 'prismjs/components/prism-c';
-import 'prismjs/components/prism-csharp';
-import 'prismjs/components/prism-go';
-import 'prismjs/components/prism-swift';
-import 'prismjs/components/prism-r';
-import 'prismjs/components/prism-sql';
-import 'prismjs/components/prism-javascript';
-import 'prismjs/components/prism-jsx';
-import 'prismjs/components/prism-typescript';
-import 'prismjs/components/prism-tsx';
-import 'prismjs/themes/prism-tomorrow.css';
+import React, { useState, useRef } from 'react';
+import { Play, Loader2 } from 'lucide-react';
 import { languageOptions, executeCode } from '../utils/language';
 
-interface CodeEditorProps {
-  initialCode?: string;
+interface ExecutableEditorProps {
   initialLanguage?: string;
+  initialCode?: string;
   onChange?: (code: string) => void;
   onLanguageChange?: (language: string) => void;
-  onExecuteComplete?: (result: string | null, error: string | null) => void;
+  onExecuteComplete?: (output: any, error: string | null) => void;
 }
 
-const EnhancedCodeEditor: React.FC<CodeEditorProps> = ({
-  initialCode,
+const ExecutableEditor: React.FC<ExecutableEditorProps> = ({
   initialLanguage = 'javascript',
+  initialCode,
   onChange,
   onLanguageChange,
   onExecuteComplete
 }) => {
-  const defaultLanguageOption = languageOptions.find(lang => lang.value === initialLanguage) || languageOptions[0];
+  // Find the language option or default to JavaScript
+  const defaultLanguage = languageOptions.find(l => l.value === initialLanguage) || languageOptions.find(l => l.value === 'javascript')!;
   
-  const [language, setLanguage] = useState(defaultLanguageOption.value);
-  const [code, setCode] = useState(initialCode || defaultLanguageOption.default);
-  const [highlighted, setHighlighted] = useState('');
+  const [language, setLanguage] = useState(defaultLanguage.value);
+  const [code, setCode] = useState(initialCode || defaultLanguage.default);
   const [isExecuting, setIsExecuting] = useState(false);
   
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const preRef = useRef<HTMLPreElement>(null);
-  
-  // Apply syntax highlighting
-  useEffect(() => {
-    // Handle different languages for Prism
-    const prismLanguage = 
-      language === 'cpp' ? 'cpp' :
-      language === 'csharp' ? 'csharp' :
-      language === 'r' ? 'r' : language;
-      
-    try {
-      const highlighted = Prism.highlight(
-        code,
-        Prism.languages[prismLanguage] || Prism.languages.javascript,
-        prismLanguage
-      );
-      setHighlighted(highlighted);
-    } catch (error) {
-      console.error("Error highlighting code:", error);
-      // Fallback to plain text if highlighting fails
-      setHighlighted(code);
-    }
-  }, [code, language]);
-  
-  // Sync scroll between textarea and highlighted code
-  useEffect(() => {
-    const syncScroll = () => {
-      if (preRef.current && textareaRef.current) {
-        preRef.current.scrollTop = textareaRef.current.scrollTop;
-        preRef.current.scrollLeft = textareaRef.current.scrollLeft;
-      }
-    };
-    
-    const textarea = textareaRef.current;
-    if (textarea) {
-      textarea.addEventListener('scroll', syncScroll);
-      return () => textarea.removeEventListener('scroll', syncScroll);
-    }
-  }, []);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
   
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newLanguage = e.target.value;
-    const languageOption = languageOptions.find(lang => lang.value === newLanguage);
-    
     setLanguage(newLanguage);
     
-    // If code is default or empty, set to new language default
-    if (!code || code === defaultLanguageOption.default) {
+    const languageOption = languageOptions.find(l => l.value === newLanguage);
+    
+    // If the code is empty or matches the default for the previous language, update it
+    if (!code.trim() || code === defaultLanguage.default) {
       const newDefaultCode = languageOption?.default || '';
       setCode(newDefaultCode);
       if (onChange) {
@@ -99,7 +46,7 @@ const EnhancedCodeEditor: React.FC<CodeEditorProps> = ({
     }
   };
   
-  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handleCodeChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newCode = e.target.value;
     setCode(newCode);
     if (onChange) {
@@ -107,12 +54,12 @@ const EnhancedCodeEditor: React.FC<CodeEditorProps> = ({
     }
   };
   
-  const handleTab = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleTabKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Tab') {
       e.preventDefault();
-      const target = e.target as HTMLTextAreaElement;
-      const start = target.selectionStart;
-      const end = target.selectionEnd;
+      const textarea = e.currentTarget;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
       
       // Insert 2 spaces for tab
       const newCode = code.substring(0, start) + '  ' + code.substring(end);
@@ -120,9 +67,8 @@ const EnhancedCodeEditor: React.FC<CodeEditorProps> = ({
       
       // Move cursor position after the inserted tab
       setTimeout(() => {
-        if (textareaRef.current) {
-          textareaRef.current.selectionStart = start + 2;
-          textareaRef.current.selectionEnd = start + 2;
+        if (textarea) {
+          textarea.selectionStart = textarea.selectionEnd = start + 2;
         }
       }, 0);
       
@@ -133,14 +79,18 @@ const EnhancedCodeEditor: React.FC<CodeEditorProps> = ({
   };
   
   const runCode = async () => {
+    if (isExecuting) return;
+    
     setIsExecuting(true);
     try {
       const result = await executeCode(language, code);
+      
+      // We'll pass the raw result object to the parent component
+      // The parent will handle displaying stdout, stderr, and exit_code
       if (onExecuteComplete) {
-        onExecuteComplete(result.result, null);
+        onExecuteComplete(result, null);
       }
     } catch (error) {
-      console.error("Execution error:", error);
       if (onExecuteComplete) {
         onExecuteComplete(null, error instanceof Error ? error.message : String(error));
       }
@@ -150,16 +100,16 @@ const EnhancedCodeEditor: React.FC<CodeEditorProps> = ({
   };
   
   return (
-    <div className="code-editor-with-execution flex flex-col h-full">
+    <div className="executable-editor flex flex-col h-full">
       <div className="bg-gray-800 p-2 flex items-center justify-between">
         <select 
           value={language}
           onChange={handleLanguageChange}
           className="bg-gray-700 text-white px-3 py-1 rounded outline-none"
         >
-          {languageOptions.map(option => (
-            <option key={option.value} value={option.value}>
-              {option.label}
+          {languageOptions.map(lang => (
+            <option key={lang.value} value={lang.value}>
+              {lang.label}
             </option>
           ))}
         </select>
@@ -167,41 +117,32 @@ const EnhancedCodeEditor: React.FC<CodeEditorProps> = ({
         <button 
           onClick={runCode}
           disabled={isExecuting}
-          className={`px-4 py-1 rounded ${
-            isExecuting 
-              ? 'bg-gray-600 text-gray-300 cursor-not-allowed' 
-              : 'bg-green-600 hover:bg-green-700 text-white'
+          className={`px-4 py-1 rounded text-white flex items-center space-x-2 ${
+            isExecuting ? 'bg-gray-600 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'
           }`}
         >
-          {isExecuting ? 'Running...' : 'Run Code'}
+          {isExecuting ? (
+            <Loader2 className="h-4 w-4 animate-spin mr-1" />
+          ) : (
+            <Play className="h-4 w-4 mr-1" />
+          )}
+          <span>{isExecuting ? 'Executing...' : 'Run Code'}</span>
         </button>
       </div>
       
-      <div className="code-editor-container relative flex-1 font-mono">
-        <pre 
-          ref={preRef}
-          className="absolute inset-0 overflow-auto p-4 m-0 bg-transparent pointer-events-none"
-          aria-hidden="true"
-        >
-          <code 
-            className={`language-${language}`}
-            dangerouslySetInnerHTML={{ __html: highlighted }}
-          />
-        </pre>
+      <div className="flex-1 relative">
         <textarea
-          ref={textareaRef}
+          ref={editorRef}
           value={code}
-          onChange={handleChange}
-          onKeyDown={handleTab}
-          className="absolute inset-0 w-full h-full bg-transparent text-transparent caret-white p-4 resize-none outline-none font-mono"
+          onChange={handleCodeChange}
+          onKeyDown={handleTabKey}
+          className="w-full h-full bg-gray-900 text-white font-mono p-4 resize-none outline-none"
           spellCheck="false"
-          autoCapitalize="off"
-          autoComplete="off"
-          autoCorrect="off"
+          placeholder="Write your code here..."
         />
       </div>
     </div>
   );
 };
 
-export default EnhancedCodeEditor;
+export default ExecutableEditor;

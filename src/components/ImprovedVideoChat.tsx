@@ -1,24 +1,41 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Video, StopCircle, Play, Clock, MessageSquare, Mic } from 'lucide-react';
-import EnhancedCodeEditor from './EnhancedCodeEditor';
+import { Video, StopCircle, Play, Clock, MessageSquare, Mic, CheckCircle, XCircle } from 'lucide-react';
+import ExecutableEditor from './EnhancedCodeEditor';
 import { languageOptions } from '../utils/language';
 
-const ImprovedVideoChat: React.FC = () => {
-  const [isRecording, setIsRecording] = useState<boolean>(false);
-  const [recordingTime, setRecordingTime] = useState<number>(0);
-  const [isMuted, setIsMuted] = useState<boolean>(false);
+interface ExecutionOutput {
+  stdout?: string;
+  stderr?: string;
+  exit_code?: number;
+  result?: string;
+}
+
+const VideoChatWithExecution: React.FC = () => {
+  // Video chat state
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [isMuted, setIsMuted] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
-  const [code, setCode] = useState<string>(languageOptions[0].default);
-  const [language, setLanguage] = useState<string>(languageOptions[0].value);
-  const [output, setOutput] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isExecuting, setIsExecuting] = useState<boolean>(false);
   
+  // Code execution state
+  const [code, setCode] = useState(languageOptions[1].default); // Start with JavaScript
+  const [selectedLanguage, setSelectedLanguage] = useState(languageOptions[1].value);
+  const [output, setOutput] = useState<ExecutionOutput | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Message log
+  const [messages, setMessages] = useState([
+    { type: 'system', text: 'Session started' },
+    { type: 'user', text: 'Can you help me with this component?' },
+    { type: 'assistant', text: 'Sure, I see you\'re working on a code component. What would you like to know?' }
+  ]);
+  
+  // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   
-  // Clean up function for when component unmounts
+  // Clean up function when component unmounts
   useEffect(() => {
     return () => {
       stopMediaTracks();
@@ -28,7 +45,7 @@ const ImprovedVideoChat: React.FC = () => {
     };
   }, []);
   
-  // Timer effect
+  // Timer effect for recording
   useEffect(() => {
     if (isRecording) {
       timerRef.current = setInterval(() => {
@@ -47,8 +64,8 @@ const ImprovedVideoChat: React.FC = () => {
     };
   }, [isRecording]);
   
-  // Stop all media tracks
-  const stopMediaTracks = (): void => {
+  // Helper for stopping media tracks
+  const stopMediaTracks = () => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
@@ -56,7 +73,7 @@ const ImprovedVideoChat: React.FC = () => {
   };
   
   // Toggle mute functionality
-  const toggleMute = (): void => {
+  const toggleMute = () => {
     if (streamRef.current) {
       streamRef.current.getAudioTracks().forEach(track => {
         track.enabled = isMuted;
@@ -66,7 +83,7 @@ const ImprovedVideoChat: React.FC = () => {
   };
   
   // Start recording and access webcam
-  const startRecording = async (): Promise<void> => {
+  const startRecording = async () => {
     try {
       setStreamError(null);
       
@@ -87,14 +104,18 @@ const ImprovedVideoChat: React.FC = () => {
       
       // Start recording state
       setIsRecording(true);
+      
+      // Add message to log
+      addMessage('system', 'Recording started');
     } catch (err) {
       console.error("Error accessing camera:", err);
       setStreamError(err instanceof Error ? err.message : "Failed to access camera");
+      addMessage('system', `Camera error: ${err instanceof Error ? err.message : "Failed to access camera"}`);
     }
   };
   
   // Stop recording
-  const stopRecording = (): void => {
+  const stopRecording = () => {
     stopMediaTracks();
     
     if (videoRef.current) {
@@ -104,20 +125,36 @@ const ImprovedVideoChat: React.FC = () => {
     setIsRecording(false);
     setRecordingTime(0);
     setIsMuted(false);
+    
+    // Add message to log
+    addMessage('system', 'Recording stopped');
+  };
+  
+  // Handle code execution results
+  const handleExecutionComplete = (result: ExecutionOutput | null, errorMsg: string | null) => {
+    if (result) {
+      setOutput(result);
+      setError(null);
+      
+      const hasOutput = result.stdout || (result.result && typeof result.result === 'string');
+      addMessage('assistant', hasOutput ? 'Your code ran successfully!' : 'Your code executed with no output.');
+    } else if (errorMsg) {
+      setOutput(null);
+      setError(errorMsg);
+      addMessage('assistant', 'There was an error running your code.');
+    }
+  };
+  
+  // Add message to the log
+  const addMessage = (type: 'user' | 'assistant' | 'system', text: string) => {
+    setMessages(prev => [...prev, { type, text }]);
   };
   
   // Format time display
-  const formatTime = (seconds: number): string => {
+  const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
     const secs = (seconds % 60).toString().padStart(2, '0');
     return `${mins}:${secs}`;
-  };
-
-  // Handle code execution results
-  const handleExecutionComplete = (result: string | null, errorMsg: string | null) => {
-    setOutput(result);
-    setError(errorMsg);
-    setIsExecuting(false);
   };
 
   return (
@@ -131,36 +168,72 @@ const ImprovedVideoChat: React.FC = () => {
               Code Editor
             </div>
             <div className="flex-1 bg-gray-900 text-amber-50 font-mono text-sm overflow-hidden">
-              <EnhancedCodeEditor
+              <ExecutableEditor
+                initialLanguage={selectedLanguage}
                 initialCode={code}
-                initialLanguage={language}
                 onChange={setCode}
-                onLanguageChange={setLanguage}
+                onLanguageChange={setSelectedLanguage}
                 onExecuteComplete={handleExecutionComplete}
               />
             </div>
           </div>
           
-          {/* Output section */}
-          <div className="bg-amber-100 rounded-lg shadow-md h-40 overflow-hidden flex flex-col">
+          {/* Output section - Enhanced based on reference */}
+          <div className="bg-amber-100 rounded-lg shadow-md h-48 overflow-hidden flex flex-col">
             <div className="px-4 py-3 font-semibold border-b border-amber-200">
               Output
             </div>
-            <div className="bg-gray-900 text-amber-50 p-4 font-mono text-sm flex-1 overflow-auto">
-              {isExecuting && (
-                <div className="text-amber-400">Running code...</div>
-              )}
-              
-              {error && (
-                <div className="text-red-400">{error}</div>
-              )}
-              
-              {!isExecuting && !error && output && (
-                <div className="text-green-300 whitespace-pre-wrap">{output}</div>
-              )}
-              
-              {!isExecuting && !error && !output && (
-                <div className="text-gray-500">Click "Run Code" to see output here</div>
+            <div className="bg-white p-4 font-mono text-sm flex-1 overflow-auto">
+              {error || output ? (
+                <div className="bg-white rounded">
+                  <div className="flex items-center space-x-2 mb-2">
+                    {error ? (
+                      <XCircle className="h-5 w-5 text-red-500" />
+                    ) : (
+                      <CheckCircle className="h-5 w-5 text-green-500" />
+                    )}
+                    <h2 className="text-lg font-semibold">
+                      {error ? 'Error' : 'Output'}
+                    </h2>
+                  </div>
+                  
+                  {error ? (
+                    <div className="text-red-500 whitespace-pre-wrap">{error}</div>
+                  ) : output && (
+                    <div className="space-y-2">
+                      {output.stdout && (
+                        <div className="bg-gray-100 p-3 rounded">
+                          <h3 className="font-semibold mb-1">Standard Output:</h3>
+                          <pre className="whitespace-pre-wrap">{output.stdout}</pre>
+                        </div>
+                      )}
+                      
+                      {output.stderr && (
+                        <div className="bg-gray-100 p-3 rounded">
+                          <h3 className="font-semibold mb-1">Standard Error:</h3>
+                          <pre className="whitespace-pre-wrap">{output.stderr}</pre>
+                        </div>
+                      )}
+                      
+                      {output.result && typeof output.result === 'string' && !output.stdout && (
+                        <div className="bg-gray-100 p-3 rounded">
+                          <h3 className="font-semibold mb-1">Result:</h3>
+                          <pre className="whitespace-pre-wrap">{output.result}</pre>
+                        </div>
+                      )}
+                      
+                      {output.exit_code !== undefined && (
+                        <div className="text-sm text-gray-500">
+                          Exit Code: {output.exit_code}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-gray-500 flex items-center justify-center h-full">
+                  Click "Run Code" to see output here
+                </div>
               )}
             </div>
           </div>
@@ -237,29 +310,20 @@ const ImprovedVideoChat: React.FC = () => {
             </div>
             
             <div className="flex-1 bg-white p-3 overflow-y-auto">
-              <div className="mb-2 p-2 rounded bg-amber-50 text-gray-500 text-sm">
-                Session started
-              </div>
-              
-              <div className="mb-2 p-2 rounded bg-amber-200 text-gray-800 ml-4">
-                Can you help me with this component?
-              </div>
-              
-              <div className="mb-2 p-2 rounded bg-gray-100 text-gray-800 mr-4">
-                Sure, I see you're working on a code component. What would you like to know?
-              </div>
-              
-              {output && (
-                <div className="mb-2 p-2 rounded bg-gray-100 text-gray-800 mr-4">
-                  Your code ran successfully. The output is shown in the output panel.
+              {messages.map((message, index) => (
+                <div 
+                  key={index} 
+                  className={`mb-2 p-2 rounded ${
+                    message.type === 'user' 
+                      ? 'bg-amber-200 text-gray-800 ml-4' 
+                      : message.type === 'assistant'
+                        ? 'bg-gray-100 text-gray-800 mr-4'
+                        : 'bg-amber-50 text-gray-500 text-sm'
+                  }`}
+                >
+                  {message.text}
                 </div>
-              )}
-              
-              {error && (
-                <div className="mb-2 p-2 rounded bg-gray-100 text-gray-800 mr-4">
-                  There was an error running your code. Please check the output panel for details.
-                </div>
-              )}
+              ))}
             </div>
           </div>
         </div>
@@ -268,4 +332,4 @@ const ImprovedVideoChat: React.FC = () => {
   );
 };
 
-export default ImprovedVideoChat;
+export default VideoChatWithExecution;

@@ -18,28 +18,39 @@ export interface LanguageOption {
     { value: 'sql', label: 'SQL', default: 'SELECT "Hello, World!" as greeting;' }
   ];
   
-  export interface CodeExecutionResponse {
-    result: string;
+  export interface ExecutionResult {
+    // Standard fields from code execution APIs
+    stdout?: string;
+    stderr?: string;
+    exit_code?: number;
+    
+    // Alternative result format
+    result?: string | any;
     error?: string;
   }
   
-  export async function executeCode(language: string, code: string): Promise<CodeExecutionResponse> {
-    const response = await fetch('https://code-executor-924828558796.us-central1.run.app/execute', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        language,
-        code,
-      }),
-    });
-    
-    const data = await response.json();
-    
-    if (!response.ok) {
-      throw new Error(data.error || 'Failed to execute code');
+  export async function executeCode(language: string, code: string): Promise<ExecutionResult> {
+    try {
+      const response = await fetch('https://code-executor-924828558796.us-central1.run.app/execute', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          language,
+          code,
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to execute code');
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Code execution error:', error);
+      throw error;
     }
-    
-    return data;
   }

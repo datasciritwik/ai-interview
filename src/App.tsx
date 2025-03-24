@@ -1,10 +1,10 @@
 import React from 'react';
-import ImprovedVideoChat from './components/ImprovedVideoChat';
+import VideoChatWithExecution from './components/ImprovedVideoChat';
 
 function App() {
   return (
     <div className="app">
-      <ImprovedVideoChat />
+      <VideoChatWithExecution />
     </div>
   );
 }
