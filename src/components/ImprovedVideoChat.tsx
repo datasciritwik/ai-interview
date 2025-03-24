@@ -1,27 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Video, StopCircle, Play, Clock, MessageSquare, Mic } from 'lucide-react';
+import EnhancedCodeEditor from './EnhancedCodeEditor';
+import { languageOptions } from '../utils/language';
 
 const ImprovedVideoChat: React.FC = () => {
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [recordingTime, setRecordingTime] = useState<number>(0);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [streamError, setStreamError] = useState<string | null>(null);
-  const [code, setCode] = useState<string>(`import React, { useState } from 'react';
-
-function Counter() {
-  const [count, setCount] = useState(0);
-  
-  return (
-    <div>
-      <h2>Counter: {count}</h2>
-      <button onClick={() => setCount(count + 1)}>
-        Increment
-      </button>
-    </div>
-  );
-}
-
-export default Counter;`);
+  const [code, setCode] = useState<string>(languageOptions[0].default);
+  const [language, setLanguage] = useState<string>(languageOptions[0].value);
+  const [output, setOutput] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isExecuting, setIsExecuting] = useState<boolean>(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -122,6 +113,13 @@ export default Counter;`);
     return `${mins}:${secs}`;
   };
 
+  // Handle code execution results
+  const handleExecutionComplete = (result: string | null, errorMsg: string | null) => {
+    setOutput(result);
+    setError(errorMsg);
+    setIsExecuting(false);
+  };
+
   return (
     <div className="flex h-screen bg-amber-50 text-gray-800">
       <div className="flex w-full p-4">
@@ -132,11 +130,13 @@ export default Counter;`);
             <div className="bg-amber-100 px-4 py-3 font-semibold border-b border-amber-200">
               Code Editor
             </div>
-            <div className="flex-1 bg-gray-900 text-amber-50 p-4 font-mono text-sm">
-              <textarea 
-                className="w-full h-full bg-transparent resize-none outline-none" 
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
+            <div className="flex-1 bg-gray-900 text-amber-50 font-mono text-sm overflow-hidden">
+              <EnhancedCodeEditor
+                initialCode={code}
+                initialLanguage={language}
+                onChange={setCode}
+                onLanguageChange={setLanguage}
+                onExecuteComplete={handleExecutionComplete}
               />
             </div>
           </div>
@@ -146,9 +146,22 @@ export default Counter;`);
             <div className="px-4 py-3 font-semibold border-b border-amber-200">
               Output
             </div>
-            <div className="bg-gray-900 text-amber-50 p-4 font-mono text-sm flex-1">
-              <div className="text-amber-400">{'>'} Running Counter component...</div>
-              <div className="text-green-400 mt-2">✓ Component rendered successfully</div>
+            <div className="bg-gray-900 text-amber-50 p-4 font-mono text-sm flex-1 overflow-auto">
+              {isExecuting && (
+                <div className="text-amber-400">Running code...</div>
+              )}
+              
+              {error && (
+                <div className="text-red-400">{error}</div>
+              )}
+              
+              {!isExecuting && !error && output && (
+                <div className="text-green-300 whitespace-pre-wrap">{output}</div>
+              )}
+              
+              {!isExecuting && !error && !output && (
+                <div className="text-gray-500">Click "Run Code" to see output here</div>
+              )}
             </div>
           </div>
         </div>
@@ -233,8 +246,20 @@ export default Counter;`);
               </div>
               
               <div className="mb-2 p-2 rounded bg-gray-100 text-gray-800 mr-4">
-                Sure, I see you're working on a counter component. What would you like to know?
+                Sure, I see you're working on a code component. What would you like to know?
               </div>
+              
+              {output && (
+                <div className="mb-2 p-2 rounded bg-gray-100 text-gray-800 mr-4">
+                  Your code ran successfully. The output is shown in the output panel.
+                </div>
+              )}
+              
+              {error && (
+                <div className="mb-2 p-2 rounded bg-gray-100 text-gray-800 mr-4">
+                  There was an error running your code. Please check the output panel for details.
+                </div>
+              )}
             </div>
           </div>
         </div>
